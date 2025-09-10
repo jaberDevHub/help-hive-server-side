@@ -250,3 +250,18 @@ app.get('/api/events/:id', async (req, res) => {
         res.status(500).json({ message: "Failed to fetch event" });
     }
 });
+
+app.patch('/api/events/:id', verifyToken, async (req, res) => {
+    try {
+        const result = await eventsCollection.updateOne(
+            { _id: new ObjectId(req.params.id) },
+            { $set: { ...req.body, updatedAt: new Date() } }
+        );
+        if (result.matchedCount === 0) return res.status(404).json({ message: "Event not found" });
+        res.json({ message: "Event updated" });
+    } catch (error) {
+        console.error("Update event error:", error);
+        res.status(500).json({ message: "Failed to update event" });
+    }
+});
+
