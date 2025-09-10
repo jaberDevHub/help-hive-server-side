@@ -264,4 +264,14 @@ app.patch('/api/events/:id', verifyToken, async (req, res) => {
         res.status(500).json({ message: "Failed to update event" });
     }
 });
+app.delete('/api/events/:id', verifyToken, async (req, res) => {
+    try {
+        const result = await eventsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+        if (result.deletedCount === 0) return res.status(404).json({ message: "Event not found" });
+        res.json({ message: "Event deleted" });
+    } catch (error) {
+        console.error("Delete event error:", error);
+        res.status(500).json({ message: "Failed to delete event" });
+    }
+});
 
