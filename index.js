@@ -223,3 +223,30 @@ app.post('/api/events', verifyToken, async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+app.get('/api/events', async (req, res) => {
+    try {
+        const { eventType, search } = req.query;
+        const query = { eventDate: { $gte: new Date() } };
+
+        if (eventType && eventType !== "All") query.eventType = eventType;
+        if (search) query.title = { $regex: search, $options: "i" };
+
+        const events = await eventsCollection.find(query).sort({ eventDate: 1 }).toArray();
+        res.json(events);
+    } catch (error) {
+        console.error("Fetch events error:", error);
+        res.status(500).json({ message: "Failed to fetch events" });
+    }
+});
+
+app.get('/api/events/:id', async (req, res) => {
+    try {
+        const event = await eventsCollection.findOne({ _id: new ObjectId(req.params.id) });
+        if (!event) return res.status(404).json({ message: "Event not found" });
+        res.json(event);
+    } catch (error) {
+        console.error("Get event error:", error);
+        res.status(500).json({ message: "Failed to fetch event" });
+    }
+});
