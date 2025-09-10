@@ -198,3 +198,28 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/', (req, res) => {
     res.send("Hello World!");
 });
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+app.post('/api/events', verifyToken, async (req, res) => {
+    try {
+        const { title, eventDate } = req.body;
+        if (!title || !eventDate) {
+            return res.status(400).json({ message: "Title and event date are required" });
+        }
+
+        const event = {
+            ...req.body,
+            eventDate: new Date(eventDate),
+            createdAt: new Date()
+        };
+
+        const result = await eventsCollection.insertOne(event);
+        res.status(201).json({ message: "Event created", eventId: result.insertedId });
+    } catch (error) {
+        console.error("Create event error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
