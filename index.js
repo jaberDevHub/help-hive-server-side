@@ -275,3 +275,27 @@ app.delete('/api/events/:id', verifyToken, async (req, res) => {
     }
 });
 
+app.get('/api/events/user/:email', verifyToken, async (req, res) => {
+    try {
+        if (req.user.email !== req.params.email) {
+            return res.status(403).send({ message: 'forbidden access' });
+        }
+        const events = await eventsCollection
+            .find({ email: req.params.email })
+            .sort({ createdAt: -1 })
+            .toArray();
+        res.json(events);
+    } catch (error) {
+        console.error("User events error:", error);
+        res.status(500).json({ message: "Failed to fetch user events" });
+    }
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error("Unhandled error:", err);
+    res.status(500).json({ message: "Internal server error" });
+});
+
+// Start server
+startServer();
