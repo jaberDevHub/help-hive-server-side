@@ -193,3 +193,8 @@ app.post('/api/auth/logout', (req, res) => {
         expires: new Date(0),
     }).send({ success: true });
 });
+
+// Routes
+app.get('/', (req, res) => {
+    res.send("Hello World!");
+});
