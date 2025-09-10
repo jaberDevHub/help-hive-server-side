@@ -183,3 +183,13 @@ app.post('/api/auth/token', (req, res) => {
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
     }).send({ success: true });
 });
+
+app.post('/api/auth/logout', (req, res) => {
+    res.cookie('token', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+        path: '/',
+        expires: new Date(0),
+    }).send({ success: true });
+});
