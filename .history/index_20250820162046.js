@@ -1,12 +1,10 @@
 import express from 'express';
-import cors from 'cors';
+import cors = require('cors');
 import dotenv from 'dotenv';
 import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import process from 'process';
-import jwt from 'jsonwebtoken';
-import cookieParser from 'cookie-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,31 +19,11 @@ const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors({
     origin: [
-        'http://localhost:5175',
-        'https://help-hive-client-side.vercel.app'
+        'http://localhost:5173',
+        
     ],
     credentials: true
 }));
-app.use(cookieParser());
-
-// JWT Secret
-const jwtSecret = process.env.JWT_SECRET;
-
-// Verify Token Middleware
-const verifyToken = (req, res, next) => {
-    const token = req.cookies?.token;
-    if (!token) {
-        return res.status(401).send({ message: 'unauthorized access' });
-    }
-    jwt.verify(token, jwtSecret, (err, decoded) => {
-        if (err) {
-            return res.status(401).send({ message: 'unauthorized access' });
-        }
-        req.user = decoded;
-        next();
-    });
-};
-
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -173,13 +151,146 @@ async function startServer() {
     }
 }
 
-// Auth routes
-app.post('/api/auth/token', (req, res) => {
-    const user = req.body;
-    const token = jwt.sign(user, jwtSecret, { expiresIn: '1h' });
-    res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-    }).send({ success: true });
+// Routes
+app.get('/', (req, res) => {
+    res.send("Hello World!");
 });
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+app.post('/api/events', async (req, res) => {
+    try {
+        const { title, eventDate } = req.body;
+        if (!title || !eventDate) {
+            return res.status(400).json({ message: "Title and event date are required" });
+        }
+
+        const event = {
+            ...req.body,
+            eventDate: new Date(eventDate),
+            createdAt: new Date()
+        };
+
+        const result = await eventsCollection.insertOne(event);
+        res.status(201).json({ message: "Event created", eventId: result.insertedId });
+    } catch (error) {
+        console.error("Create event error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+app.get('/api/events', async (req, res) => {
+    try {
+        const { eventType, search } = req.query;
+        const query = { eventDate: { $gte: new Date() } };
+
+        if (eventType && eventType !== "All") query.eventType = eventType;
+        if (search) query.title = { $regex: search, $options: "i" };
+
+        const events = await eventsCollection.find(query).sort({ eventDate: 1 }).toArray();
+        res.json(events);
+    } catch (error) {
+        console.error("Fetch events error:", error);
+        res.status(500).json({ message: "Failed to fetch events" });
+    }
+});
+
+app.get('/api/events/:id', async (req, res) => {
+    try {
+        const event = await eventsCollection.findOne({ _id: new ObjectId(req.params.id) });
+        if (!event) return res.status(404).json({ message: "Event not found" });
+        res.json(event);
+    } catch (error) {
+        console.error("Get event error:", error);
+        res.status(500).json({ message: "Failed to fetch event" });
+    }
+});
+
+app.patch('/api/events/:id', async (req, res) => {
+    try {
+        const result = await eventsCollection.updateOne(
+            { _id: new ObjectId(req.params.id) },
+            { $set: { ...req.body, updatedAt: new Date() } }
+        );
+        if (result.matchedCount === 0) return res.status(404).json({ message: "Event not found" });
+        res.json({ message: "Event updated" });
+    } catch (error) {
+        console.error("Update event error:", error);
+        res.status(500).json({ message: "Failed to update event" });
+    }
+});
+
+app.delete('/api/events/:id', async (req, res) => {
+    try {
+        const result = await eventsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+        if (result.deletedCount === 0) return res.status(404).json({ message: "Event not found" });
+        res.json({ message: "Event deleted" });
+    } catch (error) {
+        console.error("Delete event error:", error);
+        res.status(500).json({ message: "Failed to delete event" });
+    }
+});
+
+app.get('/api/events/user/:email', async (req, res) => {
+    try {
+        const events = await eventsCollection
+            .find({ email: req.params.email })
+            .sort({ createdAt: -1 })
+            .toArray();
+        res.json(events);
+    } catch (error) {
+        console.error("User events error:", error);
+        res.status(500).json({ message: "Failed to fetch user events" });
+    }
+});
+
+app.post('/api/events/:id/join', async (req, res) => {
+    try {
+        const eventId = req.params.id;
+        const { email } = req.body;
+
+        if (!email) return res.status(400).json({ message: "Email is required" });
+
+        const event = await eventsCollection.findOne({ _id: new ObjectId(eventId) });
+        if (!event) return res.status(404).json({ message: "Event not found" });
+
+        const alreadyJoined = await joinedEvents.findOne({ eventId, participantEmail: email });
+        if (alreadyJoined) return res.status(400).json({ message: "Already joined this event" });
+
+        await joinedEvents.insertOne({
+            eventId,
+            participantEmail: email,
+            joinedAt: new Date(),
+            event
+        });
+
+        res.status(201).json({ message: "Successfully joined event" });
+    } catch (error) {
+        console.error("Join event error:", error);
+        res.status(500).json({ message: "Failed to join event" });
+    }
+});
+
+app.get('/api/events/user/:email/joined', async (req, res) => {
+    try {
+        const joined = await joinedEvents
+            .find({ participantEmail: req.params.email })
+            .sort({ joinedAt: -1 })
+            .toArray();
+        res.json(joined);
+    } catch (error) {
+        console.error("Fetch joined events error:", error);
+        res.status(500).json({ message: "Failed to fetch joined events" });
+    }
+});
+
+// Global error handler
+app.use((err, req, res) => {
+    console.error("Unhandled error:", err);
+    res.status(500).json({ message: "Internal server error" });
+});
+
+// Start server
+startServer();
